@@ -28,6 +28,7 @@
                 <Button x:Name="btnOpen" Click="btnOpen_Click" Content="Open file ..."  Padding="4" Margin="4" />
                 <Label Content="Select camera:" VerticalAlignment="Center"/>
                 <ComboBox x:Name="cobVideoSource" Width="100" SelectionChanged="cobVideoSource_SelectionChanged" VerticalAlignment="Center"/>
+                <ComboBox x:Name="cobCameraParameter" Width="180" VerticalAlignment="Center" Margin="10,0" SelectionChanged="cobCameraParameter_SelectionChanged"/>
             </StackPanel>
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Text="Video Renderer:" VerticalAlignment="Center" Margin="4" />

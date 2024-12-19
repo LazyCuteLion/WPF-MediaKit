@@ -136,6 +136,12 @@ namespace Test_Application
                 return;
             SetCameraCaptureElementVisible(true);
             cameraCaptureElement.VideoCaptureDevice = MultimediaUtil.VideoInputDevices[cobVideoSource.SelectedIndex];
+            cobCameraParameter.ItemsSource = MultimediaUtil.GetCameraParmeters(cameraCaptureElement.VideoCaptureDevice);
+        }
+
+        private void cobCameraParameter_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            cameraCaptureElement.SetParameters((WPFMediaKit.DirectShow.CameraParmeter)cobCameraParameter.SelectedItem);
         }
     }
 }
