@@ -1178,9 +1178,12 @@ namespace WPFMediaKit.DirectShow.MediaPlayers
             Marshal.PtrToStructure(mediaType.formatPtr, videoInfo);
 
             Rectangle rect = videoInfo.SrcRect.ToRectangle();
-            size = new Size(rect.Width, rect.Height);
+            if (rect.Width > 0 && rect.Height > 0)
+                size = new Size(rect.Width, rect.Height);
+            else
+                size = new Size(videoInfo.BmiHeader.Width, videoInfo.BmiHeader.Height);
 
-        done:
+            done:
             DsUtils.FreeAMMediaType(mediaType);
 
             if (pin != null)

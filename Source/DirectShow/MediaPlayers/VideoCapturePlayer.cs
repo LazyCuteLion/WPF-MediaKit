@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Linq;
 using System.Runtime.InteropServices;
 using DirectShowLib;
+using WPFMediaKit.DirectShow.Controls;
 
 namespace WPFMediaKit.DirectShow.MediaPlayers
 {
@@ -58,7 +60,7 @@ namespace WPFMediaKit.DirectShow.MediaPlayers
         /// <summary>
         /// Flag to detect if the capture source has changed
         /// </summary>
-        private bool m_videoCaptureSourceChanged;
+        //private bool m_videoCaptureSourceChanged;
 
         /// <summary>
         /// The video capture device
@@ -68,7 +70,7 @@ namespace WPFMediaKit.DirectShow.MediaPlayers
         /// <summary>
         /// Flag to detect if the capture source device has changed
         /// </summary>
-        private bool m_videoCaptureDeviceChanged;
+        //private bool m_videoCaptureDeviceChanged;
 
         /// <summary>
         /// The sample grabber interface used for getting samples in a callback
@@ -112,11 +114,12 @@ namespace WPFMediaKit.DirectShow.MediaPlayers
             {
                 VerifyAccess();
                 m_videoCaptureSource = value;
-                m_videoCaptureSourceChanged = true;
+                //m_videoCaptureSourceChanged = true;
 
                 /* Free our unmanaged resources when
                  * the source changes */
                 FreeResources();
+                SetupGraph();
             }
         }
 
@@ -131,11 +134,12 @@ namespace WPFMediaKit.DirectShow.MediaPlayers
             {
                 VerifyAccess();
                 m_videoCaptureDevice = value;
-                m_videoCaptureDeviceChanged = true;
-
+                // m_videoCaptureDeviceChanged = true;
+                m_videoCaptureSource = m_videoCaptureDevice?.Name;
                 /* Free our unmanaged resources when
                  * the source changes */
                 FreeResources();
+                SetupGraph();
             }
         }
 
@@ -199,6 +203,21 @@ namespace WPFMediaKit.DirectShow.MediaPlayers
             {
                 VerifyAccess();
                 m_desiredHeight = value;
+            }
+        }
+
+        private Guid _mediaSubType = Guid.Empty;
+        public Guid MediaSubType
+        {
+            get
+            {
+                VerifyAccess();
+                return _mediaSubType;
+            }
+            set
+            {
+                VerifyAccess();
+                _mediaSubType = value;
             }
         }
 
@@ -282,22 +301,10 @@ namespace WPFMediaKit.DirectShow.MediaPlayers
                 DsError.ThrowExceptionForHR(hr);
 
                 /* Add our capture device source to the graph */
-                if (m_videoCaptureSourceChanged)
-                {
-                    m_captureDevice = AddFilterByName(m_graph,
-                                                      FilterCategory.VideoInputDevice,
-                                                      VideoCaptureSource);
 
-                    m_videoCaptureSourceChanged = false;
-                }
-                else if (m_videoCaptureDeviceChanged)
-                {
-                    m_captureDevice = AddFilterByDevicePath(m_graph,
-                                                            FilterCategory.VideoInputDevice,
-                                                            VideoCaptureDevice.DevicePath);
-
-                    m_videoCaptureDeviceChanged = false;
-                }
+                m_captureDevice = AddFilterByName(m_graph,
+                                                  FilterCategory.VideoInputDevice,
+                                                  VideoCaptureSource);
 
                 /* If we have a null capture device, we have an issue */
                 if (m_captureDevice == null)
@@ -307,12 +314,12 @@ namespace WPFMediaKit.DirectShow.MediaPlayers
                 {
                     /* Configure the video output pin with our parameters and if it fails
                      * then just use the default media subtype*/
-                    if (!SetVideoCaptureParameters(graphBuilder, m_captureDevice, MediaSubType.YUY2))
-                        SetVideoCaptureParameters(graphBuilder, m_captureDevice, Guid.Empty);
+                    if (!SetVideoCaptureParameters(graphBuilder, m_captureDevice, DirectShowLib.MediaSubType.YUY2))
+                        SetVideoCaptureParameters(graphBuilder, m_captureDevice, MediaSubType);
                 }
                 else
                     /* Configure the video output pin with our parameters */
-                    SetVideoCaptureParameters(graphBuilder, m_captureDevice, Guid.Empty);
+                    SetVideoCaptureParameters(graphBuilder, m_captureDevice, MediaSubType);
 
                 var rendererType = VideoRendererType.VideoMixingRenderer9;
 
@@ -346,7 +353,7 @@ namespace WPFMediaKit.DirectShow.MediaPlayers
                 IFileSinkFilter sink = null;
                 if (!string.IsNullOrEmpty(this.m_fileName))
                 {
-                    hr = graphBuilder.SetOutputFileName(MediaSubType.Asf, this.m_fileName, out mux, out sink);
+                    hr = graphBuilder.SetOutputFileName(DirectShowLib.MediaSubType.Asf, this.m_fileName, out mux, out sink);
                     DsError.ThrowExceptionForHR(hr);
 
                     hr = graphBuilder.RenderStream(PinCategory.Capture, MediaType.Video, m_captureDevice, null, mux);
@@ -431,21 +438,49 @@ namespace WPFMediaKit.DirectShow.MediaPlayers
                 throw new WPFMediaKitException("Failed to get IAMStreamConfig");
             }
 
+
             /* The media type of the video */
-            AMMediaType media;
+            AMMediaType media = null;
+            var videoInfo = new VideoInfoHeader();
 
             /* Get the AMMediaType for the video out pin */
             hr = videoStreamConfig.GetFormat(out media);
             DsError.ThrowExceptionForHR(hr);
 
             /* Make the VIDEOINFOHEADER 'readable' */
-            var videoInfo = new VideoInfoHeader();
+
             Marshal.PtrToStructure(media.formatPtr, videoInfo);
 
             /* Setup the VIDEOINFOHEADER with the parameters we want */
             videoInfo.AvgTimePerFrame = DSHOW_ONE_SECOND_UNIT / FPS;
             videoInfo.BmiHeader.Width = DesiredWidth;
             videoInfo.BmiHeader.Height = DesiredHeight;
+
+            /*Get the camera parmeters and find the best "SubType" we want */
+            var cameraParmeters = MultimediaUtil.GetCameraParmeters(VideoCaptureSource, videoStreamConfig);
+            if (cameraParmeters?.Count > 0)
+            {
+                /* Find by Size, FPS and SubType */
+                var find = cameraParmeters.FirstOrDefault(d => d.Width == DesiredWidth
+                                                            && d.Height == DesiredHeight
+                                                            && d.FPS == FPS
+                                                            && (d.SubType == mediaSubType || mediaSubType == Guid.Empty));
+                /* Not find, find by Size first and FPS as a second condition */
+                if (find == null)
+                {
+                    var temp = cameraParmeters.Where(d => d.Width == DesiredWidth && d.Height == DesiredHeight);
+                    if (temp.Any())
+                    {
+                        find = temp.FirstOrDefault(d => d.FPS == FPS);
+                        /* Not find, get the max FPS */
+                        if (find == null)
+                            find = temp.First();
+                    }
+                }
+               
+                if (find != null)
+                    mediaSubType = find.SubType;
+            }
 
             if (mediaSubType != Guid.Empty)
             {
@@ -460,6 +495,7 @@ namespace WPFMediaKit.DirectShow.MediaPlayers
                 media.subType = mediaSubType;
             }
 
+
             /* Copy the data back to unmanaged memory */
             Marshal.StructureToPtr(videoInfo, media.formatPtr, false);
 
@@ -473,6 +509,16 @@ namespace WPFMediaKit.DirectShow.MediaPlayers
                 return false;
 
             return true;
+        }
+
+        public void SetVideoCaptureParameters(CameraParmeter parmeter)
+        {
+            this.FreeResources();
+            this.FPS = parmeter.FPS;
+            this.DesiredWidth = parmeter.Width;
+            this.DesiredHeight = parmeter.Height;
+            this.MediaSubType = parmeter.SubType;
+            this.InitializeBitmapFrame(parmeter.Width, parmeter.Height);
         }
 
         private Bitmap m_videoFrame;
@@ -552,7 +598,7 @@ namespace WPFMediaKit.DirectShow.MediaPlayers
             var mediaType = new DirectShowLib.AMMediaType
             {
                 majorType = MediaType.Video,
-                subType = MediaSubType.RGB24,
+                subType = DirectShowLib.MediaSubType.RGB24,
                 formatType = FormatType.VideoInfo
             };
 

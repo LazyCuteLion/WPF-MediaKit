@@ -79,6 +79,7 @@
     <Compile Include="DirectShow\Controls\ValueConverters.cs" />
     <Compile Include="DirectShow\Controls\VideoCaptureElement.cs" />
     <Compile Include="DirectShow\MediaPlayers\BaseClasses.cs" />
+    <Compile Include="DirectShow\MediaPlayers\CameraParmeter.cs" />
     <Compile Include="DirectShow\MediaPlayers\ClassId.cs" />
     <Compile Include="DirectShow\MediaPlayers\DirectShowUtil.cs" />
     <Compile Include="DirectShow\MediaPlayers\DvdPlayer.cs" />

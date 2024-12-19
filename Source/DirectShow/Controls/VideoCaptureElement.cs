@@ -287,6 +287,19 @@ namespace WPFMediaKit.DirectShow.Controls
             });
         }
 
+        public void SetParameters(CameraParmeter parmeter)
+        {
+            this.DesiredPixelWidth = parmeter.Width;
+            this.DesiredPixelHeight = parmeter.Height;
+            this.FPS = parmeter.FPS;
+            VideoCapturePlayer.Dispatcher.BeginInvoke((Action)delegate
+            {
+                VideoCapturePlayer.SetVideoCaptureParameters(parmeter);
+            });
+            if (this.IsPlaying)
+                this.Play();
+        }
+
         public void ShowPropertyPage()
         {
             var window = Window.GetWindow(this);
